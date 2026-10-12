@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Archival Photo Map — B24 Collection</title>
+    <link rel="stylesheet" href="css/leaflet.css">
+    <link rel="stylesheet" href="css/MarkerCluster.css">
+    <link rel="stylesheet" href="css/MarkerCluster.Default.css">
+    <link rel="stylesheet" href="css/fontawesome-all.min.css">
+    <style>
+    /* ===== CSS Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+        --bg: #f5f2ec;
+        --panel-bg: #ffffff;
+        --header-bg: #2b2722;
+        --header-text: #f0ebe1;
+        --accent: #c87f3e;
+        --accent-dark: #a06528;
+        --accent-light: #e8c89e;
+        --text: #2b2722;
+        --text-muted: #7a716a;
+        --border: #d9d3c8;
+        --shadow: 0 1px 4px rgba(0,0,0,0.08);
+        --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+        --selected-ring: #c87f3e;
+        --filter-panel-w: 280px;
+        --detail-panel-w: 380px;
+    }
+
+    html, body {
+        height: 100%;
+        font-family: "Segoe UI", "Helvetica Neue", "Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        overflow: hidden;
+    }
+
+    /* ===== Header ===== */
+    .app-header {
+        background: var(--header-bg);
+        color: var(--header-text);
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 52px;
+        flex-shrink: 0;
+        z-index: 1000;
+    }
+    .app-header .icon { font-size: 20px; color: var(--accent-light); }
+    .app-header h1 {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .app-header .subtitle {
+        font-size: 11px;
+        color: #a99e8f;
+        margin-left: auto;
+        white-space: nowrap;
+    }
+    .app-header .mobile-filter-toggle {
+        display: none;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    /* ===== Layout ===== */
+    .layout {
+        display: grid;
+        grid-template-columns: var(--filter-panel-w) 1fr var(--detail-panel-w);
+        height: calc(100vh - 52px);
+        overflow: hidden;
+    }
+
+    /* ===== Filter Panel (Left) ===== */
+    .filter-panel {
+        background: var(--panel-bg);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .filter-panel .panel-header {
+        padding: 14px 16px 10px;
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        background: var(--panel-bg);
+        z-index: 10;
+    }
+    .filter-panel .panel-header h2 {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .filter-panel .record-count {
+        font-size: 13px;
+        color: var(--text);
+        font-weight: 600;
+    }
+    .filter-panel .record-count .total {
+        color: var(--text-muted);
+        font-weight: 400;
+    }
+
+    .filter-group {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+    }
+    .filter-group .group-title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+    .filter-group .group-actions {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    .filter-group .group-actions button {
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 3px 10px;
+        font-size: 11px;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .filter-group .group-actions button:hover {
+        border-color: var(--accent);
+        color: var(--accent-dark);
+        background: rgba(200,127,62,0.06);
+    }
+    .filter-group .group-actions button.active {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+    }
+    .filter-item {
+        display: flex;
+        align-items: center;
+        padding: 3px 0;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+        line-height: 1.4;
+    }
+    .filter-item input[type="checkbox"] {
+        margin-right: 8px;
+        accent-color: var(--accent);
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .filter-item .count {
+        margin-left: auto;
+        color: var(--text-muted);
+        font-size: 11px;
+        flex-shrink: 0;
+        padding-left: 8px;
+    }
+    .filter-item .label-text {
+        word-break: break-all;
+    }
+
+    /* ===== Map Container (Centre) ===== */
+    .map-container {
+        position: relative;
+        overflow: hidden;
+    }
+    #map {
+        width: 100%;
+        height: 100%;
+        background: #e8e4dd;
+    }
+    .map-overlay-info {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(255,255,255,0.92);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        color: var(--text-muted);
+        z-index: 500;
+        box-shadow: var(--shadow);
+        pointer-events: none;
+    }
+
+    /* ===== Detail Panel (Right) ===== */
+    .detail-panel {
+        background: var(--panel-bg);
+        border-left: 1px solid var(--border);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+    .detail-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--text-muted);
+    }
+    .detail-empty .empty-icon {
+        font-size: 48px;
+        color: var(--border);
+        margin-bottom: 12px;
+    }
+    .detail-empty p {
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .detail-content {
+        display: none;
+        flex-direction: column;
+    }
+    .detail-content.active { display: flex; }
+
+    .detail-photo {
+        width: 100%;
+        background: #1a1815;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 200px;
+        max-height: 45vh;
+        overflow: hidden;
+        position: relative;
+    }
+    .detail-photo img {
+        max-width: 100%;
+        max-height: 45vh;
+        object-fit: contain;
+        display: block;
+    }
+    .detail-photo .photo-loading {
+        color: #666;
+        font-size: 13px;
+    }
+
+    .detail-meta {
+        padding: 16px;
+        flex: 1;
+    }
+    .detail-meta .meta-file-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 2px;
+    }
+    .detail-meta .meta-photo-no {
+        font-size: 12px;
+        color: var(--accent-dark);
+        font-weight: 600;
+        margin-bottom: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .detail-meta .meta-list {
+        list-style: none;
+    }
+    .detail-meta .meta-list li {
+        padding: 7px 0;
+        border-bottom: 1px solid #f0ece4;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .detail-meta .meta-list li:last-child { border-bottom: none; }
+    .detail-meta .meta-list .meta-label {
+        display: block;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin-bottom: 2px;
+    }
+    .detail-meta .meta-list .meta-value {
+        color: var(--text);
+        word-break: break-word;
+    }
+
+    .detail-nav {
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+        background: #faf8f4;
+    }
+    .detail-nav button {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: #fff;
+        font-size: 12px;
+        color: var(--text);
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+    .detail-nav button:hover {
+        border-color: var(--accent);
+        background: rgba(200,127,62,0.06);
+    }
+    .detail-nav button:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    /* ===== Custom Marker Styles ===== */
+    .archival-marker {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .archival-marker .marker-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: rgba(255,158,23,0.85);
+        border: 2px solid rgba(35,35,35,0.8);
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .archival-marker:hover .marker-dot {
+        background: rgba(255,158,23,1);
+        transform: scale(1.15);
+    }
+    .archival-marker.selected .marker-dot {
+        width: 20px;
+        height: 20px;
+        background: #c87f3e;
+        border: 3px solid #fff;
+        box-shadow: 0 0 0 3px #c87f3e, 0 2px 8px rgba(0,0,0,0.4);
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 3px #c87f3e, 0 2px 8px rgba(0,0,0,0.4); }
+        50% { box-shadow: 0 0 0 6px rgba(200,127,62,0.4), 0 2px 8px rgba(0,0,0,0.4); }
+    }
+
+    /* Custom cluster styling override */
+    .marker-cluster-small { background-color: rgba(200,127,62,0.6); }
+    .marker-cluster-small div { background-color: rgba(200,127,62,0.85); }
+    .marker-cluster-medium { background-color: rgba(160,101,40,0.6); }
+    .marker-cluster-medium div { background-color: rgba(160,101,40,0.85); }
+    .marker-cluster-large { background-color: rgba(120,76,30,0.6); }
+    .marker-cluster-large div { background-color: rgba(120,76,30,0.85); }
+
+    /* ===== Responsive: Tablet ===== */
+    @media (max-width: 1023px) {
+        .layout {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+        }
+        .filter-panel {
+            grid-column: 1 / -1;
+            max-height: 200px;
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .filter-panel .panel-header {
+            position: relative;
+            flex-shrink: 0;
+            min-width: 140px;
+            border-right: 1px solid var(--border);
+            border-bottom: none;
+        }
+        .filter-group {
+            border-bottom: none;
+            border-right: 1px solid var(--border);
+            min-width: 200px;
+            flex-shrink: 0;
+        }
+        .detail-panel {
+            border-left: 1px solid var(--border);
+        }
+        :root { --detail-panel-w: 1fr; }
+    }
+
+    /* ===== Responsive: Mobile ===== */
+    @media (max-width: 767px) {
+        html, body { overflow: auto; }
+        .app-header { height: auto; padding: 8px 12px; flex-wrap: wrap; }
+        .app-header h1 { font-size: 13px; }
+        .app-header .subtitle { display: none; }
+        .app-header .mobile-filter-toggle { display: inline-flex; align-items: center; }
+
+        .layout {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto 50vh auto;
+            height: auto;
+            overflow: visible;
+        }
+        .filter-panel {
+            max-height: none;
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+            flex-direction: column;
+            overflow: visible;
+            display: none;
+        }
+        .filter-panel.open { display: flex; }
+        .filter-panel .panel-header {
+            position: relative;
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+            min-width: 0;
+        }
+        .filter-group {
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+            min-width: 0;
+        }
+        .map-container { height: 50vh; }
+        .detail-panel {
+            border-left: none;
+            border-top: 1px solid var(--border);
+        }
+        .detail-photo { max-height: 35vh; }
+        .detail-photo img { max-height: 35vh; }
+    }
+
+    /* Leaflet attribution override for theme */
+    .leaflet-container { background: #e8e4dd; }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <span class="icon"><i class="fas fa-map-marked-alt"></i></span>
+        <h1>Archival Photo Map — B24 Collection</h1>
+        <span class="subtitle">沙螺灣 · 鱟殼灣 · 逸東邨 · 赤鱲角南路</span>
+        <button class="mobile-filter-toggle" id="mobileFilterToggle">
+            <i class="fas fa-filter"></i> Filters
+        </button>
+    </header>
+
+    <div class="layout">
+        <!-- Left: Filters -->
+        <aside class="filter-panel" id="filterPanel">
+            <div class="panel-header">
+                <h2>Filters</h2>
+                <div class="record-count">
+                    <span id="visibleCount">0</span> of <span class="total" id="totalCount">0</span> records
+                </div>
+            </div>
+            <div id="filterGroups"></div>
+        </aside>
+
+        <!-- Centre: Map -->
+        <main class="map-container">
+            <div id="map"></div>
+            <div class="map-overlay-info">Base raster: OPM100_2025 clipped · Click a marker to view photograph</div>
+        </main>
+
+        <!-- Right: Photo + Metadata -->
+        <aside class="detail-panel" id="detailPanel">
+            <div class="detail-empty" id="detailEmpty">
+                <div class="empty-icon"><i class="fas fa-images"></i></div>
+                <p>Select a photograph marker on the map<br>to view its archival record.</p>
+            </div>
+            <div class="detail-content" id="detailContent">
+                <div class="detail-photo" id="detailPhoto">
+                    <span class="photo-loading">Loading…</span>
+                </div>
+                <div class="detail-meta" id="detailMeta"></div>
+                <div class="detail-nav">
+                    <button id="prevBtn"><i class="fas fa-chevron-left"></i> Previous</button>
+                    <button id="nextBtn">Next <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="js/leaflet.js"></script>
+    <script src="js/leaflet.markercluster.js"></script>
+    <script src="data/week5_table_tutorial_1.js"></script>
+    <script>
+    (function() {
+        'use strict';
+
+        // ===== Data source: reuse existing GeoJSON variable =====
+        var geoData = window.json_week5_table_tutorial_1;
+        var features = geoData.features;
+
+        // ===== Raster bounds (exact copy from original index.html) =====
+        var rasterBounds = [[22.258713230084844, 113.87447498509259],
+                            [22.33364164443673, 113.97475724974854]];
+        var mapInitBounds = [[22.262333682999348, 113.88722143357448],
+                              [22.304772579707873, 113.97203044433884]];
+
+        // ===== Photo path conversion (same logic as original) =====
+        function getPhotoSrc(photoPath) {
+            return 'images/' + String(photoPath).replace(/[\\/:]/g, '_').trim();
+        }
+
+        // ===== Filter configuration =====
+        var filterFields = ['place_name', 'photo_subject', 'location_precision'];
+        var filterState = {}; // field -> Set of selected values
+
+        // Build unique values from data
+        function getUniqueValues(field) {
+            var seen = {};
+            var vals = [];
+            for (var i = 0; i < features.length; i++) {
+                var v = features[i].properties[field];
+                if (v != null && !seen[v]) {
+                    seen[v] = true;
+                    vals.push(v);
+                }
+            }
+            vals.sort();
+            return vals;
+        }
+
+        function getValueCount(field, value) {
+            var count = 0;
+            for (var i = 0; i < features.length; i++) {
+                if (features[i].properties[field] === value) count++;
+            }
+            return count;
+        }
+
+        // ===== Build filter UI dynamically =====
+        function buildFilters() {
+            var container = document.getElementById('filterGroups');
+            container.innerHTML = '';
+
+            filterFields.forEach(function(field) {
+                var values = getUniqueValues(field);
+                filterState[field] = new Set(values); // all selected by default
+
+                var group = document.createElement('div');
+                group.className = 'filter-group';
+                group.dataset.field = field;
+
+                var title = document.createElement('div');
+                title.className = 'group-title';
+                title.textContent = field.replace(/_/g, ' ');
+                group.appendChild(title);
+
+                var actions = document.createElement('div');
+                actions.className = 'group-actions';
+
+                var selectAllBtn = document.createElement('button');
+                selectAllBtn.textContent = 'Select all';
+                selectAllBtn.addEventListener('click', function() {
+                    filterState[field] = new Set(values);
+                    updateCheckboxes(field);
+                    applyFilters();
+                });
+
+                var clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.addEventListener('click', function() {
+                    filterState[field] = new Set();
+                    updateCheckboxes(field);
+                    applyFilters();
+                });
+
+                actions.appendChild(selectAllBtn);
+                actions.appendChild(clearBtn);
+                group.appendChild(actions);
+
+                values.forEach(function(val) {
+                    var label = document.createElement('label');
+                    label.className = 'filter-item';
+
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = true;
+                    cb.dataset.field = field;
+                    cb.dataset.value = val;
+                    cb.addEventListener('change', function() {
+                        if (this.checked) {
+                            filterState[field].add(val);
+                        } else {
+                            filterState[field].delete(val);
+                        }
+                        applyFilters();
+                    });
+
+                    var labelText = document.createElement('span');
+                    labelText.className = 'label-text';
+                    labelText.textContent = val;
+
+                    var count = document.createElement('span');
+                    count.className = 'count';
+                    count.textContent = getValueCount(field, val);
+
+                    label.appendChild(cb);
+                    label.appendChild(labelText);
+                    label.appendChild(count);
+                    group.appendChild(label);
+                });
+
+                container.appendChild(group);
+            });
+        }
+
+        function updateCheckboxes(field) {
+            var cbs = document.querySelectorAll('input[type="checkbox"][data-field="' + field + '"]');
+            cbs.forEach(function(cb) {
+                cb.checked = filterState[field].has(cb.dataset.value);
+            });
+        }
+
+        // ===== Map setup =====
+        var map = L.map('map', {
+            zoomControl: true,
+            maxZoom: 28,
+            minZoom: 1
+        }).fitBounds(mapInitBounds);
+
+        // Raster overlay (exact same as original)
+        map.createPane('pane_omp100_2025_clipped_0');
+        map.getPane('pane_omp100_2025_clipped_0').style.zIndex = 400;
+        var rasterLayer = new L.imageOverlay(
+            'data/omp100_2025_clipped_0.png',
+            rasterBounds,
+            { pane: 'pane_omp100_2025_clipped_0' }
+        );
+        rasterLayer.addTo(map);
+
+        // Scale bar
+        L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
+
+        // Marker pane
+        map.createPane('pane_markers');
+        map.getPane('pane_markers').style.zIndex = 450;
+
+        // ===== Marker creation with divIcon =====
+        var allMarkers = [];      // { feature, marker, layer, visible }
+        var selectedFeatureIdx = null;
+
+        function createDivIcon(selected) {
+            return L.divIcon({
+                className: '',
+                html: '<div class="archival-marker' + (selected ? ' selected' : '') + '"><div class="marker-dot"></div></div>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+        }
+
+        // Create markers
+        for (var i = 0; i < features.length; i++) {
+            (function(idx) {
+                var feat = features[idx];
+                var coords = feat.geometry.coordinates;
+                var latlng = [coords[1], coords[0]];
+
+                var marker = L.marker(latlng, {
+                    icon: createDivIcon(false),
+                    pane: 'pane_markers'
+                });
+
+                marker._featureIdx = idx;
+
+                marker.on('click', function() {
+                    selectFeature(idx);
+                });
+
+                allMarkers.push({
+                    feature: feat,
+                    marker: marker,
+                    visible: true
+                });
+            })(i);
+        }
+
+        // Cluster group
+        var clusterGroup = L.markerClusterGroup({
+            showCoverageOnHover: false,
+            spiderfyDistanceMultiplier: 2,
+            maxClusterRadius: 50,
+            iconCreateFunction: function(cluster) {
+                var count = cluster.getChildCount();
+                var size = count <= 2 ? 'small' : count <= 4 ? 'medium' : 'large';
+                var dim = count <= 2 ? 36 : count <= 4 ? 42 : 50;
+                return L.divIcon({
+                    className: 'marker-cluster marker-cluster-' + size,
+                    html: '<div><span>' + count + '</span></div>',
+                    iconSize: [dim, dim]
+                });
+            }
+        });
+
+        // Add all markers initially
+        allMarkers.forEach(function(m) {
+            clusterGroup.addLayer(m.marker);
+        });
+        map.addLayer(clusterGroup);
+
+        // ===== Filter logic =====
+        function isFeatureVisible(feature) {
+            for (var f = 0; f < filterFields.length; f++) {
+                var field = filterFields[f];
+                var val = feature.properties[field];
+                if (val == null) return false;
+                if (!filterState[field].has(val)) return false;
+            }
+            return true;
+        }
+
+        function applyFilters() {
+            var visibleCount = 0;
+            // Remove all, then re-add visible
+            clusterGroup.clearLayers();
+
+            var visibleMarkers = [];
+            allMarkers.forEach(function(m) {
+                m.visible = isFeatureVisible(m.feature);
+                if (m.visible) {
+                    visibleMarkers.push(m.marker);
+                    visibleCount++;
+                }
+            });
+
+            clusterGroup.addLayers(visibleMarkers);
+
+            document.getElementById('visibleCount').textContent = visibleCount;
+            document.getElementById('totalCount').textContent = features.length;
+
+            // If selected feature is now hidden, clear selection
+            if (selectedFeatureIdx !== null) {
+                var sel = allMarkers[selectedFeatureIdx];
+                if (!sel.visible) {
+                    clearSelection();
+                }
+            }
+        }
+
+        // ===== Selection logic =====
+        function selectFeature(idx) {
+            // Deselect previous
+            if (selectedFeatureIdx !== null && allMarkers[selectedFeatureIdx]) {
+                allMarkers[selectedFeatureIdx].marker.setIcon(createDivIcon(false));
+            }
+
+            selectedFeatureIdx = idx;
+            var m = allMarkers[idx];
+            m.marker.setIcon(createDivIcon(true));
+
+            // Spiderfy if the marker is in a cluster
+            var parent = clusterGroup.getVisibleParent(m.marker);
+            // The cluster will auto-spiderfy on click, so just ensure marker is visible
+
+            showDetail(m.feature);
+        }
+
+        function clearSelection() {
+            if (selectedFeatureIdx !== null && allMarkers[selectedFeatureIdx]) {
+                allMarkers[selectedFeatureIdx].marker.setIcon(createDivIcon(false));
+            }
+            selectedFeatureIdx = null;
+            document.getElementById('detailEmpty').style.display = 'flex';
+            document.getElementById('detailContent').classList.remove('active');
+        }
+
+        // ===== Detail panel =====
+        function showDetail(feature) {
+            var p = feature.properties;
+
+            document.getElementById('detailEmpty').style.display = 'none';
+            var dc = document.getElementById('detailContent');
+            dc.classList.add('active');
+
+            // Photo
+            var photoContainer = document.getElementById('detailPhoto');
+            var photoSrc = getPhotoSrc(p.photo_path);
+            photoContainer.innerHTML = '<span class="photo-loading">Loading…</span>';
+            var img = new Image();
+            img.onload = function() {
+                photoContainer.innerHTML = '';
+                photoContainer.appendChild(img);
+            };
+            img.onerror = function() {
+                photoContainer.innerHTML = '<span class="photo-loading">Image not found</span>';
+            };
+            img.src = photoSrc;
+            img.alt = p.file_name || 'Photograph';
+
+            // Metadata (only requested fields)
+            var metaFields = [
+                { key: 'file_name', label: 'File Name' },
+                { key: 'place_name', label: 'Place Name' },
+                { key: 'capture_date', label: 'Capture Date' },
+                { key: 'photo_subject', label: 'Photo Subject' },
+                { key: 'direction', label: 'Direction' },
+                { key: 'location_precision', label: 'Location Precision' },
+                { key: 'location_source', label: 'Location Source' },
+                { key: 'notes', label: 'Notes' },
+                { key: 'location_note', label: 'Location Note' }
+            ];
+
+            var metaHtml = '<div class="meta-file-name">' + escapeHtml(p.file_name || '') + '</div>';
+            metaHtml += '<div class="meta-photo-no">Photo No: ' + escapeHtml(p.photo_no || '') + '</div>';
+            metaHtml += '<ul class="meta-list">';
+            metaFields.forEach(function(f) {
+                var val = p[f.key];
+                if (val != null && val !== '') {
+                    metaHtml += '<li>';
+                    metaHtml += '<span class="meta-label">' + f.label + '</span>';
+                    metaHtml += '<span class="meta-value">' + escapeHtml(String(val)) + '</span>';
+                    metaHtml += '</li>';
+                }
+            });
+            metaHtml += '</ul>';
+
+            document.getElementById('detailMeta').innerHTML = metaHtml;
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+        // ===== Navigation (Previous / Next) =====
+        document.getElementById('prevBtn').addEventListener('click', function() {
+            navigateSelection(-1);
+        });
+        document.getElementById('nextBtn').addEventListener('click', function() {
+            navigateSelection(1);
+        });
+
+        function navigateSelection(dir) {
+            if (selectedFeatureIdx === null) return;
+            // Find next visible feature
+            var idx = selectedFeatureIdx;
+            for (var step = 0; step < allMarkers.length; step++) {
+                idx = (idx + dir + allMarkers.length) % allMarkers.length;
+                if (allMarkers[idx].visible) {
+                    selectFeature(idx);
+                    // Pan to marker
+                    var coords = allMarkers[idx].feature.geometry.coordinates;
+                    map.panTo([coords[1], coords[0]]);
+                    return;
+                }
+            }
+        }
+
+        // ===== Mobile filter toggle =====
+        document.getElementById('mobileFilterToggle').addEventListener('click', function() {
+            var fp = document.getElementById('filterPanel');
+            fp.classList.toggle('open');
+        });
+
+        // ===== Initialize =====
+        buildFilters();
+        applyFilters();
+
+        // Fix map size after layout
+        setTimeout(function() { map.invalidateSize(); }, 200);
+        window.addEventListener('resize', function() {
+            clearTimeout(window._resizeTimer);
+            window._resizeTimer = setTimeout(function() {
+                map.invalidateSize();
+            }, 200);
+        });
+
+    })();
+    </script>
+</body>
+</html>
